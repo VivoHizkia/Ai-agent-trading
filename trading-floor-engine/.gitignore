@@ -1,0 +1,13 @@
+node_modules/
+data/
+# office/ berisi data akun pribadi (saldo, trade, log, state): tidak dipublikasikan. Hanya dokumen aturannya yang ikut.
+office/*
+!office/PLAYBOOK.md
+!office/RISK-RULES.md
+!office/agents/
+office/agents/*/*
+!office/agents/*/CLAUDE.md
+dist/
+.env
+.env.*
+!.env.example

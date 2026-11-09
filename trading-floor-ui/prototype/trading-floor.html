@@ -1,0 +1,1079 @@
+<!doctype html>
+<html lang="id">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Trading Floor</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Pixelify+Sans:wght@500;700&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<style>
+*,*::before,*::after{box-sizing:border-box}
+[hidden]{display:none!important}
+body{margin:0}
+
+/* Layout: one-screen app. Header + ticker + room tabs on top, isometric office canvas with a side panel, office log along the bottom.
+   Single committed look: a cozy evening control room (dark chrome), the canvas scene itself switches day/night by Jakarta time. */
+:root{
+  --bg:#191d2b;        /* ink blue, the room behind the office */
+  --surface:#232a3d;   /* panels */
+  --surface-2:#2c3550; /* raised rows, inputs */
+  --line:#3a4463;
+  --fg:#ece6d8;        /* warm paper text */
+  --muted:#a4a9bd;
+  --accent:#f0b44c;    /* desk-lamp amber */
+  --accent-ink:#2a1d05;
+  --teal:#63c7b2;
+  --ok:#6fcf8e;
+  --bad:#ef6b57;
+  --warn:#f3d25b;
+  --f-display:"Pixelify Sans", "Courier New", monospace;
+  --f-body:"IBM Plex Sans", "Segoe UI", system-ui, sans-serif;
+  --f-mono:"IBM Plex Mono", ui-monospace, "SFMono-Regular", Menlo, monospace;
+  color-scheme:dark;
+}
+html,body{height:100%}
+body{background:var(--bg);color:var(--fg);font-family:var(--f-body);overflow:hidden}
+body::before{content:"";position:fixed;inset:0 0 auto;height:env(safe-area-inset-top,0px);z-index:10;background:var(--bg)}
+.app{height:100%;display:flex;flex-direction:column;gap:10px;
+  padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px));padding-block:12px}
+button{font:inherit;color:inherit;cursor:pointer}
+button:focus-visible,select:focus-visible,textarea:focus-visible,canvas:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+
+/* header */
+.top{display:flex;align-items:center;gap:12px;flex-wrap:wrap}
+.brand{font-family:var(--f-display);font-weight:700;font-size:22px;letter-spacing:.5px;display:flex;align-items:center;gap:8px}
+.brand i{width:12px;height:12px;background:var(--accent);display:inline-block;box-shadow:4px 4px 0 var(--teal)}
+.top .spacer{flex:1}
+.chip{font-family:var(--f-mono);font-size:12px;padding:4px 8px;border:1px solid var(--line);border-radius:4px;color:var(--muted);white-space:nowrap}
+.chip.mode{color:var(--teal);border-color:color-mix(in srgb,var(--teal) 45%,transparent)}
+.ctrl{background:var(--surface);border:1px solid var(--line);border-radius:4px;padding:5px 10px;font-size:12.5px}
+.ctrl[aria-pressed="true"]{border-color:var(--accent);color:var(--accent)}
+
+/* ticker */
+.ticker{overflow:hidden;border-block:1px solid var(--line);background:var(--surface);border-radius:4px;flex:none}
+.ticker-track{display:flex;gap:28px;width:max-content;padding:7px 0;animation:tick 48s linear infinite;font-family:var(--f-mono);font-size:12.5px;font-variant-numeric:tabular-nums}
+.ticker-track span{white-space:nowrap}
+.ticker-track b{font-weight:500;color:var(--fg)}
+.ticker-track .lbl{color:var(--muted)}
+.dn{color:var(--bad)} .up{color:var(--ok)}
+@keyframes tick{from{transform:translateX(0)}to{transform:translateX(-50%)}}
+
+/* tabs */
+.tabs{display:flex;gap:4px;overflow-x:auto;flex:none;scrollbar-width:none}
+.tabs::-webkit-scrollbar{display:none}
+.tab{position:relative;background:transparent;border:1px solid transparent;border-radius:4px;padding:6px 11px;font-family:var(--f-display);font-size:14px;color:var(--muted);white-space:nowrap}
+.tab:hover{color:var(--fg);background:var(--surface)}
+.tab[aria-selected="true"]{color:var(--accent-ink);background:var(--accent)}
+.tab .badge{position:absolute;top:-6px;right:-5px;min-width:18px;height:18px;padding:0 5px;border-radius:9px;background:var(--bad);color:#fff;font-family:var(--f-mono);font-size:11px;line-height:18px;text-align:center}
+
+/* stage */
+.stage{flex:1;min-height:0;display:grid;grid-template-columns:minmax(0,1fr) 360px;gap:10px}
+.floor-wrap{position:relative;min-width:0;min-height:0;border-radius:6px;overflow:hidden;border:1px solid var(--line);background:#141826}
+canvas#floor{display:block;width:100%;height:100%;touch-action:none;cursor:grab}
+canvas#floor.dragging{cursor:grabbing}
+.hint{position:absolute;left:10px;bottom:10px;font-size:12px;color:var(--muted);background:color-mix(in srgb,var(--bg) 80%,transparent);padding:4px 8px;border-radius:4px;pointer-events:none}
+
+/* panel */
+.panel{min-width:0;min-height:0;overflow-y:auto;background:var(--surface);border:1px solid var(--line);border-radius:6px;padding:14px;display:flex;flex-direction:column;gap:14px}
+.panel h2{font-family:var(--f-display);font-size:18px;font-weight:700;margin:0;text-wrap:balance}
+.panel h3{font-size:11px;font-weight:600;letter-spacing:.8px;text-transform:uppercase;color:var(--muted);margin:0}
+.panel .close{display:none}
+.who{display:flex;gap:10px;align-items:center}
+.avatar{width:38px;height:38px;border-radius:4px;flex:none;display:grid;place-items:center;font-family:var(--f-display);font-weight:700;color:#1b1b1b}
+.who p{margin:2px 0 0;color:var(--muted);font-size:13px}
+.state{display:inline-flex;align-items:center;gap:6px;font-size:12px;font-family:var(--f-mono);padding:3px 8px;border-radius:4px;background:var(--surface-2)}
+.state::before{content:"";width:8px;height:8px;border-radius:50%;background:var(--muted)}
+.state.working::before{background:var(--ok)}
+.state.waiting_approval::before{background:var(--warn)}
+.state.alert::before{background:var(--bad)}
+.state.meeting::before{background:var(--teal)}
+.state.idle::before{background:var(--muted)}
+.bubble-now{background:var(--fg);color:#22232b;border-radius:6px;padding:8px 10px;font-size:13.5px;line-height:1.4}
+.sec{display:flex;flex-direction:column;gap:8px}
+.md{font-size:13.5px;line-height:1.5;background:var(--bg);border:1px solid var(--line);border-radius:4px;padding:10px 12px;overflow-x:auto}
+.md h4{font-family:var(--f-display);font-size:15px;margin:2px 0 6px}
+.md h5{font-size:12px;letter-spacing:.6px;text-transform:uppercase;color:var(--muted);margin:10px 0 4px}
+.md ul{margin:0;padding-left:18px}
+.md p{margin:4px 0}
+.md table{border-collapse:collapse;font-family:var(--f-mono);font-size:12px;font-variant-numeric:tabular-nums;margin:4px 0}
+.md td,.md th{border-bottom:1px solid var(--line);padding:3px 8px 3px 0;text-align:left;white-space:nowrap}
+.msgs{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:6px}
+.msgs li{background:var(--surface-2);border-radius:4px;padding:8px 10px;font-size:13px;line-height:1.45}
+.msgs .meta{font-family:var(--f-mono);font-size:11.5px;color:var(--muted);display:flex;justify-content:space-between;gap:8px}
+.msgs strong{display:block;margin:2px 0}
+.hist{list-style:none;margin:0;padding:0;font-size:12.5px;color:var(--muted);display:flex;flex-direction:column;gap:4px}
+.hist time{font-family:var(--f-mono);color:var(--fg);margin-right:6px}
+
+/* approval card */
+.apv{border:1px solid var(--line);border-radius:6px;background:var(--bg);overflow:hidden}
+.apv.pending{border-color:var(--warn)}
+.apv-head{display:flex;align-items:center;gap:8px;flex-wrap:wrap;padding:10px 12px;background:var(--surface-2)}
+.pair{font-family:var(--f-display);font-size:18px;font-weight:700}
+.side{font-family:var(--f-mono);font-size:12px;font-weight:500;padding:2px 7px;border-radius:3px}
+.side.long{background:color-mix(in srgb,var(--ok) 22%,transparent);color:var(--ok)}
+.side.short{background:color-mix(in srgb,var(--bad) 22%,transparent);color:var(--bad)}
+.pill{margin-left:auto;font-size:12px;padding:2px 8px;border-radius:3px;font-family:var(--f-mono)}
+.pill.pending{background:var(--warn);color:#2a2305}
+.pill.approved{background:var(--ok);color:#0c2414}
+.pill.rejected{background:var(--bad);color:#2b0b06}
+.kv{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:1px;background:var(--line);margin:0}
+.kv div{background:var(--bg);padding:8px 10px;min-width:0}
+.kv dt{font-size:10.5px;letter-spacing:.6px;text-transform:uppercase;color:var(--muted)}
+.kv dd{margin:2px 0 0;font-family:var(--f-mono);font-size:13.5px;font-variant-numeric:tabular-nums;overflow-wrap:anywhere}
+.why{padding:10px 12px;display:flex;flex-direction:column;gap:6px;font-size:13px;line-height:1.45}
+.why p{margin:0}
+.edit{padding:0 12px 10px;display:grid;grid-template-columns:1fr 1fr;gap:8px}
+.field{display:flex;flex-direction:column;gap:4px;font-size:12px;color:var(--muted)}
+.field select,.field textarea{background:var(--surface-2);color:var(--fg);border:1px solid var(--line);border-radius:4px;padding:6px 8px;font:inherit;font-size:13px}
+.field.wide{grid-column:1/-1}
+.actions{display:flex;gap:6px;padding:0 12px 12px;flex-wrap:wrap}
+.btn{border-radius:4px;padding:8px 12px;font-weight:600;font-size:13.5px;border:1px solid var(--line);background:var(--surface-2)}
+.btn.go{background:var(--ok);border-color:var(--ok);color:#0c2414}
+.btn.no{background:transparent;border-color:var(--bad);color:var(--bad)}
+.btn:disabled{opacity:.45;cursor:not-allowed}
+.fine{font-size:12px;color:var(--muted);margin:0;padding:0 12px 12px;line-height:1.45}
+.stats{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px}
+.stat{background:var(--bg);border:1px solid var(--line);border-radius:4px;padding:8px 10px}
+.stat span{display:block;font-size:11px;color:var(--muted);letter-spacing:.5px;text-transform:uppercase}
+.stat b{font-family:var(--f-mono);font-weight:500;font-size:16px;font-variant-numeric:tabular-nums}
+.rules{margin:0;padding-left:18px;font-size:13px;line-height:1.55}
+.link{background:none;border:none;color:var(--accent);padding:0;text-decoration:underline;text-underline-offset:3px;font-size:13px}
+
+/* log */
+.log{flex:none;height:118px;display:flex;flex-direction:column;gap:6px;min-height:0}
+.log h2{font-family:var(--f-display);font-size:14px;margin:0;color:var(--muted);font-weight:500}
+.log ol{list-style:none;margin:0;padding:8px 10px;overflow-y:auto;flex:1;background:var(--surface);border:1px solid var(--line);border-radius:6px;font-size:13px;display:flex;flex-direction:column;gap:3px}
+.log li{display:flex;gap:10px;min-width:0}
+.log time{font-family:var(--f-mono);color:var(--muted);flex:none;font-variant-numeric:tabular-nums}
+.log .who-to{color:var(--accent);flex:none}
+.log .txt{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+
+.toast{position:fixed;right:max(16px,calc(env(safe-area-inset-right,0px) + 16px));top:calc(env(safe-area-inset-top,0px) + 14px);z-index:20;max-width:min(360px,calc(100vw - 32px));background:var(--warn);color:#2a2305;padding:10px 14px;border-radius:6px;font-size:13.5px;font-weight:500;box-shadow:0 8px 24px rgba(0,0,0,.35)}
+
+@media (max-width:860px){
+  .stage{grid-template-columns:minmax(0,1fr)}
+  .panel{position:fixed;left:0;right:0;bottom:0;max-height:72%;z-index:15;border-radius:10px 10px 0 0;
+    padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px));
+    padding-bottom:calc(16px + env(safe-area-inset-bottom,0px));box-shadow:0 -10px 30px rgba(0,0,0,.45);transform:translateY(105%);transition:transform .25s ease}
+  .panel.open{transform:none}
+  .panel .close{display:block;align-self:flex-end;background:var(--surface-2);border:1px solid var(--line);border-radius:4px;padding:4px 10px;font-size:13px}
+  .log{height:96px}
+  .kv{grid-template-columns:repeat(2,minmax(0,1fr))}
+  .top .chip.clock{display:none}
+}
+@media (prefers-reduced-motion:reduce){.ticker-track{animation:none}.panel{transition:none}}
+</style>
+</head>
+<body>
+
+
+<div class="app">
+  <header class="top">
+    <div class="brand"><i aria-hidden="true"></i>Trading Floor</div>
+    <span class="chip mode" title="Semua order hanya simulasi sampai kamu bilang live">PAPER · data contoh</span>
+    <span class="chip clock" id="clock">--:-- WIB</span>
+    <span class="spacer"></span>
+    <button class="ctrl" id="demoBtn" aria-pressed="true">Demo jalan</button>
+    <button class="ctrl" id="nightBtn">Lampu: auto</button>
+  </header>
+
+  <div class="ticker" aria-label="Ticker pasar"><div class="ticker-track" id="ticker"></div></div>
+
+  <nav class="tabs" id="tabs" role="tablist" aria-label="Ruangan"></nav>
+
+  <main class="stage">
+    <div class="floor-wrap" id="floorWrap">
+      <canvas id="floor" tabindex="0" aria-label="Kantor isometrik. Klik karakter untuk membuka catatannya."></canvas>
+      <div class="hint">Klik karakter untuk lihat catatan · geser untuk pindah</div>
+    </div>
+    <aside class="panel" id="panel" aria-live="polite"></aside>
+  </main>
+
+  <section class="log" aria-label="Log kantor">
+    <h2>Log Kantor</h2>
+    <ol id="log"></ol>
+  </section>
+</div>
+<div class="toast" id="toast" hidden></div>
+
+<script>
+/* ------------------------------------------------------------------
+   DATA LAYER
+   Shapes mirror the files the Next.js version will read from ./office:
+   agents/<id>/status.json, CATATAN-<NAMA>.md, inbox/<id>/*.json,
+   approvals/*.json, market/snapshot.json. In this prototype they live
+   in memory; later, replace `store` updates with the SSE feed.
+------------------------------------------------------------------- */
+const EQUITY = 53.12 + 27.89; // spot BTC + XRP dari screenshot, 23 Okt 17:26
+const store = {
+  market: {
+    asOf: "23 Okt 2026 17:26 WIB",
+    prices: [
+      { pair: "BTCUSDT", last: 81811.85, chg: -0.31, dp: 2 },
+      { pair: "XRPUSDT", last: 1.32, chg: -0.74, dp: 4 },
+    ],
+    fundingBtc: 0.010,
+    equity: EQUITY,
+    pnlToday: 0,
+    openPositions: [],
+  },
+  agents: [],
+  messages: [],
+  approvals: [],
+  log: [],
+};
+
+const ROOMS = [
+  { id: "lobby",   name: "Lobby",          x0: 0,  x1: 8,  y0: 0, y1: 7,  floor: "#d2bd95" },
+  { id: "riset",   name: "Ruang Riset",    x0: 8,  x1: 16, y0: 0, y1: 7,  floor: "#b8c3c7" },
+  { id: "risk",    name: "Risk Desk",      x0: 16, x1: 23, y0: 0, y1: 7,  floor: "#adbfd5" },
+  { id: "exec",    name: "Execution Room", x0: 23, x1: 30, y0: 0, y1: 7,  floor: "#aaa3b8" },
+  { id: "meeting", name: "Ruang Meeting",  x0: 0,  x1: 8,  y0: 7, y1: 15, floor: "#cbb08a" },
+  { id: "jurnal",  name: "Ruang Jurnal",   x0: 8,  x1: 16, y0: 7, y1: 15, floor: "#c5a98b" },
+  { id: "lounge",  name: "Lounge & Pool",  x0: 16, x1: 23, y0: 7, y1: 15, floor: "#b7cfa6" },
+  { id: "bos",     name: "Ruang Bos",      x0: 23, x1: 30, y0: 7, y1: 15, floor: "#c99f7c" },
+];
+const GW = 30, GH = 15;
+
+const AGENT_DEFS = [
+  { id: "raka",  nama: "Raka",  jabatan: "Head Trader",       divisi: "Trading",   seat: [5, 4],   shirt: "#d9774f", hair: "#3a2a22" },
+  { id: "sinta", nama: "Sinta", jabatan: "Analis Teknikal",   divisi: "Riset",     seat: [10, 3],  shirt: "#5aa6c9", hair: "#1f1a1a" },
+  { id: "bima",  nama: "Bima",  jabatan: "Analis Sentimen",   divisi: "Riset",     seat: [14, 3],  shirt: "#8a7fd0", hair: "#4a3020" },
+  { id: "dimas", nama: "Dimas", jabatan: "Risk Manager",      divisi: "Risk",      seat: [19, 4],  shirt: "#4f9a6e", hair: "#262626" },
+  { id: "eko",   nama: "Eko",   jabatan: "Eksekutor",         divisi: "Execution", seat: [26, 4],  shirt: "#c9a341", hair: "#2e2218" },
+  { id: "lala",  nama: "Lala",  jabatan: "Jurnal & Evaluasi", divisi: "Jurnal",    seat: [12, 11], shirt: "#d0698f", hair: "#5a3324" },
+];
+
+const CATATAN = {
+  raka: `# CATATAN-RAKA
+## Fokus minggu ini
+- Pair aktif: **BTCUSDT** dan **XRPUSDT** (sama dengan aset spot Bos)
+- Gaya: swing 1–3 hari, bukan scalping
+- Semua plan lewat Dimas dulu, lalu approval Bos
+## Plan aktif
+- BTC long: entry 81,700 · SL 80,880 · TP 83,340 (contoh untuk uji alur)
+## Pelajaran dari backtest
+- EMA20/50 + filter EMA200 di 4H kalah dari hold spot 3 tahun terakhir
+- Jangan entry di pasar chop, di situ strategi paling banyak rugi`,
+  sinta: `# CATATAN-SINTA
+## Watchlist
+- BTCUSDT 4H, 1H
+- XRPUSDT 4H
+## Checklist setup
+- Struktur market searah EMA200 4H
+- Entry di zona S/R, bukan kejar candle
+- Invalidasi jelas sebelum kirim ke Raka
+## Catatan
+- Sinyal EMA cross saja terlalu sering kena whipsaw (win rate 19–25% di backtest)`,
+  bima: `# CATATAN-BIMA
+## Yang dipantau
+- Funding rate, open interest, long/short ratio
+- Likuidasi besar
+- Jadwal berita: CPI, FOMC, NFP
+## Aturan
+- 30 menit sebelum dan sesudah berita high-impact: flag **jangan entry**
+## Status
+- Funding BTC 0.010% (contoh), netral`,
+  dimas: `# CATATAN-DIMAS
+## Aturan risiko (hanya Bos yang boleh ubah)
+- Risk per trade maks **1%** equity
+- Leverage maks **5x**
+- Maks 2 posisi terbuka, tidak searah di aset berkorelasi
+- Batas rugi harian **3%**, lalu stop sampai besok
+- R:R minimal 1:2, SL wajib dan tidak digeser menjauh
+## Angka hari ini
+- Equity: $${EQUITY.toFixed(2)}
+- Risk 1% = $${(EQUITY * 0.01).toFixed(2)}
+- Batas rugi harian 3% = $${(EQUITY * 0.03).toFixed(2)}
+## Catatan
+- Notional kecil. Cek minimum order exchange sebelum live`,
+  eko: `# CATATAN-EKO
+## Aturan eksekusi
+- Hanya approval berstatus **approved** dari Bos
+- Entry + SL + TP dipasang sekaligus (bracket)
+- Tanpa SL, tidak ada order
+- Koneksi error: cek status order dulu, jangan retry buta
+## Mode
+- PAPER / testnet. Live hanya kalau Bos bilang eksplisit`,
+  lala: `# CATATAN-LALA
+## Backtest 23 Okt 2026 (TextToQuant, 4H, 3 tahun)
+Strategi: EMA20/50 cross + filter EMA200, long/short, 3x
+| Aset | Trade | Win | Return | Max DD |
+|---|---|---|---|---|
+| BTC | 46 | 19.6% | -32.1% | -42.0% |
+| XRP | 71 | 25.4% | -14.1% | -40.4% |
+| Hold BTC | - | - | +166% | - |
+| Hold XRP | - | - | +152% | - |
+## Kesimpulan
+- Grade F untuk keduanya
+- Rugi terbesar di fase volatile chop
+- Next: tes TF harian, filter ADX, long-only trailing stop`,
+};
+
+const DESK_SPOTS = { lobbyBoard: true };
+const IDLE_SPOTS = [[17,11],[18,12],[22,10],[22,12],[17,13],[20,9]];
+const MEETING_SEATS = [[2,9],[3,9],[4,9],[5,9],[2,12],[3,12],[4,12],[5,12]];
+
+/* ------------------------------------------------------------------ helpers */
+let currentRoom = "lobby", selected = null, panelMode = "approval", editing = false;
+const $ = s => document.querySelector(s);
+const esc = s => String(s).replace(/[&<>"']/g, c => ({ "&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;" }[c]));
+const fmt = (n, dp = 2) => Number(n).toLocaleString("en-US", { minimumFractionDigits: dp, maximumFractionDigits: dp });
+const jktFmt = new Intl.DateTimeFormat("en-GB", { timeZone: "Asia/Jakarta", hour: "2-digit", minute: "2-digit", hour12: false });
+const nowHM = () => jktFmt.format(new Date());
+const jktHour = () => Number(new Intl.DateTimeFormat("en-GB", { timeZone: "Asia/Jakarta", hour: "2-digit", hour12: false }).format(new Date()));
+const agentById = id => store.agents.find(a => a.id === id);
+const roomOf = (gx, gy) => ROOMS.find(r => gx >= r.x0 && gx < r.x1 && gy >= r.y0 && gy < r.y1);
+
+/* ------------------------------------------------------------------ approvals */
+function calcApproval(a) {
+  const stopPct = Math.abs(a.entry - a.sl) / a.entry;
+  const riskUsd = store.market.equity * a.riskPct / 100;
+  const notional = riskUsd / stopPct;
+  return {
+    riskUsd, notional,
+    qty: notional / a.entry,
+    margin: notional / a.leverage,
+    rr: Math.abs(a.tp - a.entry) / Math.abs(a.entry - a.sl),
+    stopPct: stopPct * 100,
+    tpPct: Math.abs(a.tp - a.entry) / a.entry * 100,
+  };
+}
+store.approvals.push({
+  id: "apv-001", from: "raka", type: "entry", pair: "BTCUSDT", side: "long",
+  entry: 81700, sl: 80880, tp: 83340, riskPct: 1, leverage: 2, status: "pending",
+  alasan: "Pullback ke zona 81.6k–81.8k, harga masih di atas EMA200 4H, funding netral. Setup contoh untuk menguji alur approval.",
+  catatanRisk: "Lolos aturan: risk 1%, R:R 1:2, leverage di bawah 5x. Notional di bawah $100, jadi cek minimum order exchange sebelum live.",
+  catatanBos: "", createdAt: "17:20",
+});
+const pendingApprovals = () => store.approvals.filter(a => a.status === "pending");
+
+/* ------------------------------------------------------------------ messages & log */
+function send(from, to, subject, body, quiet) {
+  const m = { from, to, subject, body, createdAt: nowHM(), read: false };
+  store.messages.push(m);
+  addLog(`${cap(from)} → ${cap(to)}`, subject, quiet);
+  if (selected && (selected === from || selected === to)) renderPanel();
+  return m;
+}
+const cap = s => s.charAt(0).toUpperCase() + s.slice(1);
+function addLog(who, text, quiet) {
+  store.log.unshift({ t: nowHM(), who, text });
+  store.log = store.log.slice(0, 40);
+  renderLog();
+}
+function renderLog() {
+  $("#log").innerHTML = store.log.map(l =>
+    `<li><time>${esc(l.t)}</time><span class="who-to">${esc(l.who)}</span><span class="txt">${esc(l.text)}</span></li>`).join("");
+}
+
+/* ------------------------------------------------------------------ grid / pathfinding */
+const blocked = new Set();
+const key = (x, y) => x + "," + y;
+const doors = new Set();
+function addDoor(a, b) { doors.add(key(...a) + "|" + key(...b)); doors.add(key(...b) + "|" + key(...a)); }
+[8, 16, 23].forEach(bx => { addDoor([bx - 1, 3], [bx, 3]); addDoor([bx - 1, 11], [bx, 11]); });
+[4, 12, 19, 26].forEach(dx => addDoor([dx, 6], [dx, 7]));
+
+function canStep(ax, ay, bx, by) {
+  if (bx < 0 || by < 0 || bx >= GW || by >= GH) return false;
+  if (blocked.has(key(bx, by))) return false;
+  const ra = roomOf(ax, ay), rb = roomOf(bx, by);
+  if (ra !== rb) return doors.has(key(ax, ay) + "|" + key(bx, by));
+  return true;
+}
+function findPath(sx, sy, tx, ty) {
+  if (sx === tx && sy === ty) return [];
+  const prev = new Map([[key(sx, sy), null]]);
+  const q = [[sx, sy]];
+  while (q.length) {
+    const [x, y] = q.shift();
+    if (x === tx && y === ty) break;
+    for (const [dx, dy] of [[1,0],[-1,0],[0,1],[0,-1]]) {
+      const nx = x + dx, ny = y + dy, k = key(nx, ny);
+      if (prev.has(k)) continue;
+      if (!(nx === tx && ny === ty) && !canStep(x, y, nx, ny)) continue;
+      if (nx === tx && ny === ty && roomOf(x, y) !== roomOf(nx, ny) && !doors.has(key(x, y) + "|" + k)) continue;
+      prev.set(k, [x, y]); q.push([nx, ny]);
+    }
+  }
+  if (!prev.has(key(tx, ty))) return [];
+  const path = []; let cur = [tx, ty];
+  while (cur && !(cur[0] === sx && cur[1] === sy)) { path.unshift(cur); cur = prev.get(key(...cur)); }
+  return path;
+}
+
+/* ------------------------------------------------------------------ furniture */
+const furniture = [];   // drawables
+const glows = [];       // night light spots [gx, gy, z, radius, color]
+function shade(hex, f) {
+  const n = parseInt(hex.slice(1), 16);
+  const r = Math.min(255, Math.round(((n >> 16) & 255) * f));
+  const g = Math.min(255, Math.round(((n >> 8) & 255) * f));
+  const b = Math.min(255, Math.round((n & 255) * f));
+  return `rgb(${r},${g},${b})`;
+}
+function box(x0, y0, x1, y1, h, color, o = {}) {
+  furniture.push({ kind: "box", x0, y0, x1, y1, h, z: o.z || 0, color, left: o.left, right: o.right, top: o.top, alpha: o.alpha, depth: (x0 + x1) / 2 + (y0 + y1) / 2 + (o.dz || 0) });
+}
+function block(x0, y0, x1, y1) { for (let x = x0; x < x1; x++) for (let y = y0; y < y1; y++) blocked.add(key(x, y)); }
+function tilesBox(x0, y0, x1, y1, h, color, o = {}) { // split multi-tile furniture per tile for depth sorting
+  for (let x = x0; x < x1; x++) for (let y = y0; y < y1; y++) box(x, y, x + 1, y + 1, h, color, o);
+  if (!o.noBlock) block(x0, y0, x1, y1);
+}
+function desk(x, y, monitors, screen) {
+  tilesBox(x, y, x + 1, y + 1, 22, "#9b7652");
+  const w = 0.9 / monitors;
+  for (let i = 0; i < monitors; i++) {
+    const mx = x + 0.05 + i * w;
+    furniture.push({ kind: "box", x0: mx + 0.03, y0: y + 0.12, x1: mx + w - 0.03, y1: y + 0.28, h: 17, z: 22, color: "#2b3142", left: screen, depth: x + y + 1.01 });
+  }
+  glows.push([x + 0.5, y + 0.3, 30, 46, screen]);
+}
+function plant(x, y) {
+  box(x + 0.3, y + 0.3, x + 0.7, y + 0.7, 12, "#b0623f", { dz: .01 });
+  box(x + 0.25, y + 0.25, x + 0.75, y + 0.75, 18, "#4f8f4a", { z: 12, dz: .02 });
+  block(x, y, x + 1, y + 1);
+}
+
+// Lobby
+tilesBox(1, 2, 4, 3, 24, "#7c5a3c", { top: "#a37b52" });
+desk(5, 3, 2, "#4fc3a1");
+plant(0, 6); plant(7, 1);
+tilesBox(6, 5, 8, 6, 14, "#6c7fa6");
+// Ruang Riset
+desk(10, 2, 3, "#5fb7e6");
+desk(14, 2, 3, "#9d8cf0");
+plant(8, 6); plant(15, 6);
+// Risk Desk
+desk(19, 3, 2, "#7fd4ff");
+plant(22, 6);
+// Execution Room
+desk(26, 3, 3, "#f0b44c");
+box(28.35, 1.35, 28.65, 1.65, 52, "#4a4f5e");
+block(28, 1, 29, 2);
+tilesBox(29, 3, 30, 5, 48, "#353b4c", { top: "#454c60" });
+// Meeting
+tilesBox(2, 10, 6, 12, 20, "#8a6a4a", { top: "#a8835c" });
+plant(7, 14);
+// Jurnal
+tilesBox(8, 7, 12, 8, 56, "#6b4b35", { top: "#7d5a40" });
+desk(12, 10, 1, "#f0b44c");
+furniture.push({ kind: "easel", gx: 14.5, gy: 8.6, depth: 14.5 + 8.6 });
+block(14, 8, 15, 9);
+// Lounge & pool
+tilesBox(17, 8, 19, 9, 15, "#5f7fa8", { top: "#7896bd" });
+tilesBox(21, 7, 23, 8, 28, "#cfc7b9", { top: "#e1dbcf" });
+block(19, 12, 22, 14);
+plant(16, 14);
+// Ruang Bos
+tilesBox(25, 10, 28, 11, 24, "#5a3b2a", { top: "#7a5038" });
+tilesBox(29, 8, 30, 11, 54, "#6b4b35", { top: "#7d5a40" });
+plant(23, 14); plant(29, 14);
+furniture.push({ kind: "tray", gx: 26.5, gy: 10.5, depth: 26.5 + 10.5 + 0.6 });
+glows.push([26.5, 10.5, 26, 40, "#f3d25b"]);
+// boss NPC
+const BOSS = { id: "bos", nama: "Vivo", jabatan: "Bos", shirt: "#2f3a56", hair: "#1b1b1b", x: 26.5, y: 9.5, state: "working", bos: true };
+
+/* ------------------------------------------------------------------ agents */
+function targetFor(a) {
+  if (a.state === "meeting") {
+    const taken = store.agents.filter(o => o !== a && o.state === "meeting").map(o => key(...o.target));
+    return MEETING_SEATS.find(s => !taken.includes(key(...s))) || MEETING_SEATS[0];
+  }
+  if (a.state === "idle") {
+    const taken = store.agents.filter(o => o !== a && o.state === "idle").map(o => key(...o.target));
+    const free = IDLE_SPOTS.filter(s => !taken.includes(key(...s)));
+    return free[(a.id.charCodeAt(0) + a.id.length) % free.length] || IDLE_SPOTS[0];
+  }
+  return a.seat;
+}
+function setState(id, state, bubble, quiet) {
+  const a = agentById(id);
+  if (!a) return;
+  a.state = state;
+  a.bubble = bubble;
+  a.updatedAt = nowHM();
+  a.history.unshift({ t: a.updatedAt, text: bubble });
+  a.history = a.history.slice(0, 12);
+  const t = targetFor(a);
+  a.target = t;
+  const sx = Math.round(a.x - 0.5), sy = Math.round(a.y - 0.5);
+  a.path = findPath(sx, sy, t[0], t[1]);
+  if (!quiet && selected === id) renderPanel();
+}
+AGENT_DEFS.forEach(d => {
+  store.agents.push({ ...d, state: "working", bubble: "", updatedAt: nowHM(), history: [], x: d.seat[0] + 0.5, y: d.seat[1] + 0.5, path: [], target: d.seat, bob: Math.random() * 6 });
+});
+function initStates() {
+  const init = {
+    raka: ["waiting_approval", "Setup BTC long siap, nunggu izin entry"],
+    sinta: ["working", "Scan XRP 4H, harga masih di bawah EMA200"],
+    bima: ["working", "Funding BTC 0.010%, netral"],
+    dimas: ["working", "Plan BTC lolos: risk 1%, R:R 1:2"],
+    eko: ["idle", "Nunggu approval. Tanpa izin, ga ada order"],
+    lala: ["working", "Catat backtest EMA 4H: grade F"],
+  };
+  for (const [id, [s, b]] of Object.entries(init)) {
+    setState(id, s, b, true);
+    const a = agentById(id);
+    a.x = a.target[0] + 0.5; a.y = a.target[1] + 0.5; a.path = [];
+  }
+}
+initStates();
+
+// seed inbox (mirrors seed.ts)
+[
+  ["sinta", "raka", "Setup BTC long 4H", "Pullback ke 81.6k–81.8k di atas EMA200 4H. Invalid di bawah 80.9k, target 83.3k. Contoh untuk uji alur, bukan sinyal."],
+  ["bima", "raka", "Sentimen BTC", "Funding 0.010%, OI datar. Belum ada berita high-impact dalam 6 jam, cek ulang sebelum entry."],
+  ["raka", "dimas", "Plan BTC long", "Entry 81,700 · SL 80,880 · TP 83,340. Tolong cek risk."],
+  ["dimas", "raka", "Plan BTC lolos", "Risk 1% = $0.81, R:R 1:2, leverage 2x. Notional kecil, cek minimum order."],
+  ["lala", "raka", "Hasil backtest EMA 4H", "BTC -32.1%, XRP -14.1% dalam 3 tahun. Hold spot +166% / +152%. Strategi ini jangan dipakai mentah."],
+  ["raka", "bos", "Approval: BTC long", "Setup BTC long siap, nunggu izin entry di Ruang Bos."],
+].forEach(m => send(...m, true));
+
+/* ------------------------------------------------------------------ demo script */
+let demoOn = true, demoStep = 0;
+function rakaDefault() {
+  return pendingApprovals().length
+    ? ["waiting_approval", "Setup BTC long siap, nunggu izin entry"]
+    : ["working", store.market.openPositions.length ? "Posisi BTC paper jalan, dipantau" : "Susun plan berikutnya"];
+}
+const DEMO = [
+  () => { setState("sinta", "working", "XRP 4H: ditolak di 1.35, bias short"); send("sinta", "raka", "Setup XRP short 4H", "Harga ditolak di 1.35, di bawah EMA200 4H. Invalid di atas 1.37. Contoh."); },
+  () => { ["raka", "sinta", "bima"].forEach(id => setState(id, "meeting", "Bahas setup XRP short")); addLog("Raka", "panggil meeting: XRP short"); },
+  () => { setState("bima", "alert", "Ada berita makro malam ini. Tahan entry XRP"); send("bima", "raka", "Flag: jangan entry", "Berita high-impact malam ini. Aturan: tidak entry 30 menit sebelum dan sesudah."); },
+  () => { setState("raka", ...rakaDefault()); setState("sinta", "working", "Scan BTC 1H, cari konfirmasi"); setState("bima", "working", "Pantau OI dan likuidasi besar"); addLog("Raka", "XRP short ditahan sampai berita lewat"); },
+  () => { setState("lala", "idle", "Rehat kopi, jurnal sudah update"); setState("dimas", "working", store.market.openPositions.length ? "Exposure aktif, drawdown hari ini 0%" : "Exposure 0%, drawdown hari ini 0%"); },
+  () => { setState("lala", "working", "Siapkan tes TF harian + filter ADX"); send("lala", "raka", "Rencana backtest berikut", "Usul: TF 1D, filter ADX > 25, long-only trailing stop. Butuh izin Bos karena kredit tinggal 3."); },
+];
+setInterval(() => { if (!demoOn) return; DEMO[demoStep % DEMO.length](); demoStep++; }, 6500);
+
+/* ------------------------------------------------------------------ approval actions */
+function decide(id, status) {
+  const a = store.approvals.find(x => x.id === id);
+  if (!a || a.status !== "pending") return;
+  const note = ($("#apvNote")?.value || "").trim();
+  a.status = status; a.catatanBos = note; a.decidedAt = nowHM();
+  renderTabs(); renderTicker();
+  if (status === "approved") {
+    addLog("Bos", `izinkan ${a.pair} ${a.side}${note ? " · " + note : ""}`);
+    setState("raka", "working", "Izin masuk, Eko yang eksekusi");
+    setState("eko", "working", "Approval masuk. Pasang entry + SL + TP (paper)");
+    toast(`${a.pair} ${a.side.toUpperCase()} diizinkan. Eko eksekusi di mode paper.`);
+    setTimeout(() => {
+      const c = calcApproval(a);
+      store.market.openPositions.push({ pair: a.pair, side: a.side, entry: a.entry, sl: a.sl, tp: a.tp, notional: c.notional });
+      send("eko", "raka", `Fill paper ${a.pair} ${a.side}`, `Entry ${fmt(a.entry, 0)} · SL ${fmt(a.sl, 0)} · TP ${fmt(a.tp, 0)} terpasang sebagai bracket.`);
+      send("eko", "dimas", "Posisi terbuka", `Notional $${fmt(c.notional)} · margin $${fmt(c.margin)}.`, true);
+      setState("eko", "working", "Posisi paper BTC long jalan, bracket terpasang");
+      setState("dimas", "working", `Exposure ${fmt(c.notional / store.market.equity * 100, 0)}% equity, SL terpasang`);
+      setState("lala", "working", "Catat trade #1 ke jurnal");
+      renderTicker();
+    }, 3200);
+  } else {
+    addLog("Bos", `tolak ${a.pair} ${a.side}${note ? " · " + note : ""}`);
+    setState("raka", "working", "Oke, setup BTC dibatalkan");
+    setState("dimas", "working", "Plan BTC ditutup, exposure 0%");
+    toast(`${a.pair} ${a.side.toUpperCase()} ditolak. Tidak ada order.`);
+  }
+  renderPanel();
+}
+
+/* ------------------------------------------------------------------ UI: tabs, ticker, panel */
+function renderTabs() {
+  const n = pendingApprovals().length;
+  $("#tabs").innerHTML = ROOMS.map(r =>
+    `<button class="tab" role="tab" data-room="${r.id}" aria-selected="${r.id === currentRoom}">${esc(r.name)}${r.id === "bos" && n ? `<span class="badge" aria-label="${n} approval menunggu">${n}</span>` : ""}</button>`).join("");
+}
+$("#tabs").addEventListener("click", e => {
+  const b = e.target.closest(".tab"); if (!b) return;
+  goRoom(b.dataset.room);
+  if (b.dataset.room === "bos") { selected = null; panelMode = "approval"; renderPanel(true); }
+});
+function goRoom(id) { currentRoom = id; cam.follow = true; renderTabs(); }
+
+function renderTicker() {
+  const m = store.market;
+  const parts = m.prices.map(p => `<span><b>${p.pair}</b> ${fmt(p.last, p.dp)} <span class="${p.chg < 0 ? "dn" : "up"}">${p.chg > 0 ? "+" : ""}${p.chg.toFixed(2)}%</span></span>`);
+  parts.push(`<span><span class="lbl">Equity</span> <b>$${fmt(m.equity)}</b></span>`);
+  parts.push(`<span><span class="lbl">PnL hari ini</span> <b>$${fmt(m.pnlToday)}</b></span>`);
+  parts.push(`<span><span class="lbl">Posisi terbuka</span> <b>${m.openPositions.length}</b></span>`);
+  parts.push(`<span><span class="lbl">Approval menunggu</span> <b>${pendingApprovals().length}</b></span>`);
+  parts.push(`<span><span class="lbl">Funding BTC</span> <b>${m.fundingBtc.toFixed(3)}%</b> <span class="lbl">(contoh)</span></span>`);
+  parts.push(`<span><span class="lbl">Harga snapshot</span> ${m.asOf}</span>`);
+  const one = parts.join("");
+  $("#ticker").innerHTML = one + one;
+}
+
+function mdToHtml(md) {
+  const lines = md.split("\n"); let html = "", inList = false, table = [];
+  const inline = s => esc(s).replace(/\*\*(.+?)\*\*/g, "<strong>$1</strong>");
+  const flushTable = () => {
+    if (!table.length) return;
+    const rows = table.filter(r => !/^\|\s*-/.test(r)).map(r => r.split("|").slice(1, -1).map(c => c.trim()));
+    html += `<table><thead><tr>${rows[0].map(c => `<th>${inline(c)}</th>`).join("")}</tr></thead><tbody>${rows.slice(1).map(r => `<tr>${r.map(c => `<td>${inline(c)}</td>`).join("")}</tr>`).join("")}</tbody></table>`;
+    table = [];
+  };
+  for (const l of lines) {
+    if (l.startsWith("|")) { if (inList) { html += "</ul>"; inList = false; } table.push(l); continue; }
+    flushTable();
+    if (l.startsWith("- ")) { if (!inList) { html += "<ul>"; inList = true; } html += `<li>${inline(l.slice(2))}</li>`; continue; }
+    if (inList) { html += "</ul>"; inList = false; }
+    if (l.startsWith("## ")) html += `<h5>${inline(l.slice(3))}</h5>`;
+    else if (l.startsWith("# ")) html += `<h4>${inline(l.slice(2))}</h4>`;
+    else if (l.trim()) html += `<p>${inline(l)}</p>`;
+  }
+  flushTable(); if (inList) html += "</ul>";
+  return html;
+}
+
+const STATE_LABEL = { idle: "idle", working: "kerja", waiting_approval: "nunggu izin", meeting: "meeting", alert: "alert", offline: "offline" };
+function approvalCard(a) {
+  const c = calcApproval(a);
+  const statusTxt = { pending: "Menunggu izin", approved: "Diizinkan", rejected: "Ditolak" }[a.status];
+  const isP = a.status === "pending";
+  return `<div class="apv ${a.status}">
+    <div class="apv-head"><span class="pair">${a.pair}</span><span class="side ${a.side}">${a.side.toUpperCase()}</span><span class="pill ${a.status}">${statusTxt}</span></div>
+    <dl class="kv">
+      <div><dt>Entry</dt><dd>${fmt(a.entry, 0)}</dd></div>
+      <div><dt>Stop loss</dt><dd>${fmt(a.sl, 0)} <span class="dn">−${c.stopPct.toFixed(2)}%</span></dd></div>
+      <div><dt>Take profit</dt><dd>${fmt(a.tp, 0)} <span class="up">+${c.tpPct.toFixed(2)}%</span></dd></div>
+      <div><dt>R:R</dt><dd>1:${c.rr.toFixed(1)}</dd></div>
+      <div><dt>Risk</dt><dd>${a.riskPct}% · $${fmt(c.riskUsd)}</dd></div>
+      <div><dt>Size</dt><dd>${c.qty.toFixed(6)} BTC</dd></div>
+      <div><dt>Notional</dt><dd>$${fmt(c.notional)}</dd></div>
+      <div><dt>Leverage</dt><dd>${a.leverage}x</dd></div>
+      <div><dt>Margin</dt><dd>$${fmt(c.margin)}</dd></div>
+    </dl>
+    <div class="why">
+      <h3>Alasan Raka · Head Trader</h3><p>${esc(a.alasan)}</p>
+      <h3>Catatan Dimas · Risk Manager</h3><p>${esc(a.catatanRisk)}</p>
+      ${a.catatanBos ? `<h3>Catatan kamu</h3><p>${esc(a.catatanBos)}</p>` : ""}
+    </div>
+    ${isP ? `
+    <div class="edit" ${editing ? "" : "hidden"} id="editBox">
+      <label class="field">Risk per trade
+        <select id="riskSel">${[0.25, 0.5, 0.75, 1].map(v => `<option value="${v}" ${v === a.riskPct ? "selected" : ""}>${v}%</option>`).join("")}</select></label>
+      <label class="field">Leverage
+        <select id="levSel">${[1, 2, 3, 4, 5].map(v => `<option value="${v}" ${v === a.leverage ? "selected" : ""}>${v}x</option>`).join("")}</select></label>
+    </div>
+    <div class="edit"><label class="field wide">Catatan kamu (opsional)
+      <textarea id="apvNote" rows="2" placeholder="Misal: oke, tapi cek lagi sebelum berita">${esc(a.catatanBos)}</textarea></label></div>
+    <div class="actions">
+      <button class="btn go" data-act="approve">Izinkan</button>
+      <button class="btn no" data-act="reject">Tolak</button>
+      <button class="btn" data-act="edit">${editing ? "Selesai ubah" : "Ubah size"}</button>
+    </div>` : `<p class="fine">Diputuskan ${esc(a.decidedAt || "")} WIB.</p>`}
+    <p class="fine">App ini tidak pernah mengirim order. Tombol hanya mengubah status approval; Eko yang mengeksekusi, saat ini di mode paper. Batas risk 1% dan leverage 5x terkunci di pilihan.</p>
+  </div>`;
+}
+
+function renderPanel(openSheet) {
+  const p = $("#panel");
+  let html = `<button class="close" id="closePanel">Tutup</button>`;
+  if (selected) {
+    const a = selected === "bos" ? null : agentById(selected);
+    if (!a) {
+      html += `<div class="who"><div class="avatar" style="background:${BOSS.shirt};color:#fff">V</div><div><h2>Vivo · Bos</h2><p>Pemilik meja approval</p></div></div>
+        <p style="margin:0;font-size:13.5px;line-height:1.5;color:var(--muted)">Semua aturan risiko hanya bisa diubah dari sini. Agent tidak boleh mengubahnya.</p>
+        <button class="link" data-open="approval">Buka meja approval</button>`;
+    } else {
+      const inbox = store.messages.filter(m => m.to === a.id || m.from === a.id).slice(-6).reverse();
+      html += `
+        <div class="who"><div class="avatar" style="background:${a.shirt}">${a.nama[0]}</div>
+          <div><h2>${esc(a.nama)} · ${esc(a.jabatan)}</h2><p>Divisi ${esc(a.divisi)} · update ${esc(a.updatedAt)} WIB</p></div></div>
+        <div><span class="state ${a.state}">${STATE_LABEL[a.state]}</span></div>
+        <div class="bubble-now">${esc(a.bubble)}</div>
+        <div class="sec"><h3>CATATAN-${a.nama.toUpperCase()}.md</h3><div class="md">${mdToHtml(CATATAN[a.id])}</div></div>
+        <div class="sec"><h3>Pesan masuk & keluar</h3><ul class="msgs">${inbox.map(m => `
+          <li><div class="meta"><span>${cap(m.from)} → ${cap(m.to)}</span><time>${esc(m.createdAt)}</time></div><strong>${esc(m.subject)}</strong>${esc(m.body)}</li>`).join("") || "<li>Belum ada pesan.</li>"}</ul></div>
+        <div class="sec"><h3>Riwayat bubble</h3><ul class="hist">${a.history.map(h => `<li><time>${esc(h.t)}</time>${esc(h.text)}</li>`).join("")}</ul></div>`;
+    }
+  } else {
+    const pend = pendingApprovals();
+    const latest = store.approvals[store.approvals.length - 1];
+    const m = store.market;
+    html += `<div><h2>Meja Approval</h2></div>
+      ${pend.length ? pend.map(approvalCard).join("") : (latest ? approvalCard(latest) : "<p>Tidak ada permintaan izin.</p>")}
+      <div class="sec"><h3>Kondisi akun</h3>
+        <div class="stats">
+          <div class="stat"><span>Equity spot</span><b>$${fmt(m.equity)}</b></div>
+          <div class="stat"><span>Rugi harian maks</span><b>$${fmt(m.equity * 0.03)}</b></div>
+          <div class="stat"><span>Posisi terbuka</span><b>${m.openPositions.length} / 2</b></div>
+          <div class="stat"><span>Risk per trade</span><b>$${fmt(m.equity * 0.01)}</b></div>
+        </div></div>
+      <div class="sec"><h3>Aturan risiko</h3><ul class="rules">
+        <li>Risk per trade maks 1%, leverage maks 5x</li>
+        <li>Maks 2 posisi, tidak searah di aset berkorelasi</li>
+        <li>Rugi harian 3% → stop trading sampai besok</li>
+        <li>R:R minimal 1:2, SL wajib dan tidak digeser menjauh</li>
+        <li>Tidak entry 30 menit sebelum/sesudah berita besar</li></ul></div>`;
+  }
+  p.innerHTML = html;
+  if (openSheet) p.classList.add("open");
+}
+$("#panel").addEventListener("click", e => {
+  if (e.target.id === "closePanel") { $("#panel").classList.remove("open"); return; }
+  if (e.target.dataset.open === "approval") { selected = null; renderPanel(); return; }
+  const act = e.target.closest("[data-act]")?.dataset.act; if (!act) return;
+  const a = pendingApprovals()[0]; if (!a) return;
+  if (act === "approve") decide(a.id, "approved");
+  if (act === "reject") decide(a.id, "rejected");
+  if (act === "edit") { editing = !editing; if (!editing) addLog("Bos", `ubah size ${a.pair}: risk ${a.riskPct}%, ${a.leverage}x`); renderPanel(); }
+});
+$("#panel").addEventListener("change", e => {
+  const a = pendingApprovals()[0]; if (!a) return;
+  const note = $("#apvNote")?.value || "";
+  if (e.target.id === "riskSel") a.riskPct = Math.min(1, Number(e.target.value));
+  if (e.target.id === "levSel") a.leverage = Math.min(5, Number(e.target.value));
+  if (e.target.id === "riskSel" || e.target.id === "levSel") { a.catatanBos = note; renderPanel(); }
+});
+$("#panel").addEventListener("input", e => { if (e.target.id === "apvNote") { const a = pendingApprovals()[0]; if (a) a.catatanBos = e.target.value; } });
+
+let toastTimer;
+function toast(msg) { const t = $("#toast"); t.textContent = msg; t.hidden = false; clearTimeout(toastTimer); toastTimer = setTimeout(() => t.hidden = true, 4200); }
+
+$("#demoBtn").addEventListener("click", e => { demoOn = !demoOn; e.currentTarget.setAttribute("aria-pressed", demoOn); e.currentTarget.textContent = demoOn ? "Demo jalan" : "Demo berhenti"; });
+let lightMode = "auto";
+$("#nightBtn").addEventListener("click", e => { lightMode = { auto: "malam", malam: "siang", siang: "auto" }[lightMode]; e.currentTarget.textContent = "Lampu: " + lightMode; });
+const isNight = () => lightMode === "malam" || (lightMode === "auto" && (jktHour() >= 18 || jktHour() < 6));
+
+/* ------------------------------------------------------------------ canvas renderer */
+const TW = 64, TH = 32, WALL = 80;
+const iso = (gx, gy, z = 0) => ({ x: (gx - gy) * TW / 2, y: (gx + gy) * TH / 2 - z });
+const canvas = $("#floor"), ctx = canvas.getContext("2d");
+let cw = 0, ch = 0, dpr = 1, scale = 1;
+const cam = { x: 0, y: 0, follow: true };
+function resize() {
+  const r = $("#floorWrap").getBoundingClientRect();
+  dpr = window.devicePixelRatio || 1; cw = r.width; ch = r.height;
+  canvas.width = Math.round(cw * dpr); canvas.height = Math.round(ch * dpr);
+}
+new ResizeObserver(resize).observe($("#floorWrap"));
+resize();
+function roomView(r) {
+  const c = iso((r.x0 + r.x1) / 2, (r.y0 + r.y1) / 2, 18);
+  const w = ((r.x1 - r.x0) + (r.y1 - r.y0)) * TW / 2;
+  const h = ((r.x1 - r.x0) + (r.y1 - r.y0)) * TH / 2 + 110;
+  const s = Math.max(0.5, Math.min(1.6, Math.min(cw / (w * 1.12), ch / (h * 1.05))));
+  return { x: c.x, y: c.y, s };
+}
+{ const v = roomView(ROOMS[0]); cam.x = v.x; cam.y = v.y; scale = v.s; }
+
+function poly(pts, fill, stroke) {
+  ctx.beginPath(); ctx.moveTo(pts[0].x, pts[0].y);
+  for (let i = 1; i < pts.length; i++) ctx.lineTo(pts[i].x, pts[i].y);
+  ctx.closePath(); ctx.fillStyle = fill; ctx.fill();
+  if (stroke) { ctx.strokeStyle = stroke; ctx.lineWidth = 1; ctx.stroke(); }
+}
+function drawBox(b) {
+  const { x0, y0, x1, y1, z, h } = b;
+  if (b.alpha) ctx.globalAlpha = b.alpha;
+  const N = iso(x0, y0, z + h), E = iso(x1, y0, z + h), S = iso(x1, y1, z + h), W = iso(x0, y1, z + h);
+  poly([iso(x0, y1, z), iso(x1, y1, z), S, W], b.left || shade(b.color, 0.82));
+  poly([iso(x1, y1, z), iso(x1, y0, z), E, S], b.right || shade(b.color, 0.66));
+  poly([N, E, S, W], b.top || b.color);
+  ctx.globalAlpha = 1;
+}
+function rand(i) { const s = Math.sin(i * 127.1) * 43758.5453; return s - Math.floor(s); }
+
+function wallQuadX(a, b, z0, z1) { return [iso(a, 0, z0), iso(b, 0, z0), iso(b, 0, z1), iso(a, 0, z1)]; }
+function wallQuadY(a, b, z0, z1) { return [iso(0, a, z0), iso(0, b, z0), iso(0, b, z1), iso(0, a, z1)]; }
+function windowOnWall(axis, a, b, night, t, seed) {
+  const q = axis === "x" ? wallQuadX(a, b, 26, 68) : wallQuadY(a, b, 26, 68);
+  poly(q, night ? "#1a2247" : "#a9d6ee");
+  // city: silhouettes + lights, interpolated across the window plane
+  const lerp = (u, v) => { const p0 = q[0], p1 = q[1], p3 = q[3];
+    return { x: p0.x + (p1.x - p0.x) * u + (p3.x - p0.x) * v, y: p0.y + (p1.y - p0.y) * u + (p3.y - p0.y) * v }; };
+  const n = Math.round((b - a) * 3);
+  for (let i = 0; i < n; i++) {
+    const u0 = i / n, u1 = (i + 1) / n, ht = 0.25 + rand(seed + i) * 0.5;
+    poly([lerp(u0, 0), lerp(u1, 0), lerp(u1, ht), lerp(u0, ht)], night ? "#0f1430" : "#7f9db2");
+    if (night) for (let k = 0; k < 4; k++) {
+      const r = rand(seed * 7 + i * 13 + k);
+      if (r > 0.45) {
+        const p = lerp(u0 + 0.2 + 0.6 * rand(seed + i * 3 + k), 0.04 + ht * 0.85 * rand(seed + k * 11 + i));
+        ctx.globalAlpha = 0.6 + 0.4 * Math.sin(t / 900 + r * 20);
+        ctx.fillStyle = r > 0.8 ? "#ffd27a" : "#f6e3a7"; ctx.fillRect(p.x - 1, p.y - 1, 2, 2);
+        ctx.globalAlpha = 1;
+      }
+    }
+  }
+  ctx.strokeStyle = "#6e6150"; ctx.lineWidth = 2;
+  ctx.beginPath(); ctx.moveTo(q[0].x, q[0].y); ctx.lineTo(q[1].x, q[1].y); ctx.lineTo(q[2].x, q[2].y); ctx.lineTo(q[3].x, q[3].y); ctx.closePath(); ctx.stroke();
+}
+function wallBoard(a, b, z0, z1, draw) { // screen drawn on the back (gy=0) wall, sheared to sit flat on it
+  const p = iso(a, 0, z1);
+  const w = (b - a) * TW / 2, h = z1 - z0;
+  ctx.save(); ctx.translate(p.x, p.y); ctx.transform(1, 0.5, 0, 1, 0, 0);
+  ctx.fillStyle = "#1c2131"; ctx.fillRect(-3, -3, w + 6, h + 6);
+  ctx.fillStyle = "#0e1220"; ctx.fillRect(0, 0, w, h);
+  draw(w, h); ctx.restore();
+}
+function txt(s, x, y, size, color, weight = 500, font = "IBM Plex Mono") {
+  ctx.font = `${weight} ${size}px "${font}", monospace`; ctx.fillStyle = color; ctx.fillText(s, x, y);
+}
+
+function drawWalls(night, t) {
+  poly(wallQuadX(0, GW, 0, WALL), "#e6dccb");
+  poly(wallQuadY(0, GH, 0, WALL), "#d3c7b2");
+  poly([iso(0, 0, WALL), iso(GW, 0, WALL), iso(GW, 0, WALL + 5), iso(0, 0, WALL + 5)], "#b6a88f");
+  poly([iso(0, 0, WALL), iso(0, GH, WALL), iso(0, GH, WALL + 5), iso(0, 0, WALL + 5)], "#a99b82");
+  windowOnWall("x", 9, 15, night, t, 3);
+  windowOnWall("y", 1.2, 5.5, night, t, 9);
+  windowOnWall("y", 8.5, 13.5, night, t, 17);
+  // Lobby: market board
+  wallBoard(1.2, 7.6, 14, 70, (w, h) => {
+    txt("MARKET HARI INI", 8, 14, 9, "#f0b44c", 700, "Pixelify Sans");
+    store.market.prices.forEach((p, i) => {
+      txt(p.pair, 8, 30 + i * 13, 8.5, "#ece6d8");
+      txt(fmt(p.last, p.dp), 70, 30 + i * 13, 8.5, "#ece6d8");
+      txt(`${p.chg.toFixed(2)}%`, 140, 30 + i * 13, 8.5, p.chg < 0 ? "#ef6b57" : "#6fcf8e");
+    });
+    txt(`FUNDING BTC ${store.market.fundingBtc.toFixed(3)}% (contoh)`, 8, 54, 7.5, "#a4a9bd");
+  });
+  // Risk Desk: exposure screen
+  wallBoard(16.8, 22.4, 18, 70, (w) => {
+    const exp = store.market.openPositions.reduce((s, p) => s + p.notional, 0) / store.market.equity * 100;
+    txt("RISK DESK", 8, 14, 9, "#7fd4ff", 700, "Pixelify Sans");
+    txt(`EXPOSURE  ${fmt(exp, 0)}%`, 8, 28, 8.5, "#ece6d8");
+    txt(`DD HARI INI  0.00%`, 8, 40, 8.5, "#ece6d8");
+    txt(`BATAS RUGI  3% = $${fmt(store.market.equity * 0.03)}`, 8, 52, 7.5, "#a4a9bd");
+  });
+  // Execution: order status
+  wallBoard(23.6, 27.6, 18, 70, (w) => {
+    const open = store.market.openPositions.length;
+    txt("EXECUTION", 8, 14, 9, "#f0b44c", 700, "Pixelify Sans");
+    txt(open ? "BTC LONG · PAPER" : "TIDAK ADA ORDER", 8, 29, 8, open ? "#6fcf8e" : "#ece6d8");
+    txt(pendingApprovals().length ? "nunggu approval" : (open ? "bracket terpasang" : "standby"), 8, 42, 7.5, "#a4a9bd");
+    for (let i = 0; i < 6; i++) { ctx.fillStyle = i < 3 ? "#ef6b57" : "#6fcf8e"; ctx.globalAlpha = .55; ctx.fillRect(84, 22 + i * 6, 10 + rand(i + 4) * 22, 4); }
+    ctx.globalAlpha = 1;
+  });
+}
+
+function drawFloor() {
+  for (let x = 0; x < GW; x++) for (let y = 0; y < GH; y++) {
+    const r = roomOf(x, y);
+    let c = r.floor;
+    if (r.id === "lounge" && x >= 19 && x < 22 && y >= 12 && y < 14) c = "#4fb3c9";
+    const f = (x + y) % 2 ? 1 : 0.95;
+    poly([iso(x, y), iso(x + 1, y), iso(x + 1, y + 1), iso(x, y + 1)], shade(c, f));
+  }
+  // pool shimmer edge
+  poly([iso(19, 12), iso(22, 12), iso(22, 14), iso(19, 14)], "rgba(255,255,255,0)", "#e6f6fa");
+}
+function partitions() { // low walls between rooms, gaps at doors; Risk Desk walls are glass
+  const out = [];
+  const glass = (r1, r2) => r1 === "risk" || r2 === "risk";
+  [8, 16, 23].forEach(bx => {
+    for (let y = 0; y < GH; y++) {
+      if (y === 3 || y === 11) continue;
+      const g = glass(roomOf(bx - 1, y).id, roomOf(bx, y).id);
+      out.push({ kind: "box", x0: bx - 0.07, y0: y, x1: bx + 0.07, y1: y + 1, z: 0, h: g ? 46 : 22, color: g ? "#bfe3f5" : "#e7ddcc", alpha: g ? 0.45 : 1, depth: bx + y + 0.5 });
+    }
+  });
+  for (let x = 0; x < GW; x++) {
+    if ([4, 12, 19, 26].includes(x)) continue;
+    const g = glass(roomOf(x, 6).id, roomOf(x, 7).id);
+    out.push({ kind: "box", x0: x, y0: 6.93, x1: x + 1, y1: 7.07, z: 0, h: g ? 46 : 22, color: g ? "#bfe3f5" : "#e7ddcc", alpha: g ? 0.45 : 1, depth: x + 7 + 0.5 });
+  }
+  return out;
+}
+const PARTITIONS = partitions();
+
+function drawEasel(f) {
+  const p = iso(f.gx, f.gy);
+  ctx.fillStyle = "#5b4330"; ctx.fillRect(p.x - 2, p.y - 46, 4, 46);
+  const w = 112, h = 74, x = p.x - w / 2, y = p.y - 46 - h;
+  ctx.fillStyle = "#1c2131"; ctx.fillRect(x - 3, y - 3, w + 6, h + 6);
+  ctx.fillStyle = "#f6f1e5"; ctx.fillRect(x, y, w, h);
+  txt("BACKTEST 3 THN", x + 6, y + 11, 8, "#2a2d3a", 700, "Pixelify Sans");
+  const rows = [["BTC EMA", -32.1], ["XRP EMA", -14.1], ["Hold BTC", 166.4], ["Hold XRP", 152.3]];
+  const zero = x + 44, sc = 0.32;
+  ctx.fillStyle = "#c9c2b2"; ctx.fillRect(zero, y + 16, 1, h - 20);
+  rows.forEach(([l, v], i) => {
+    const yy = y + 20 + i * 13;
+    txt(l, x + 4, yy + 7, 6.5, "#2a2d3a", 500);
+    ctx.fillStyle = v < 0 ? "#d24d3b" : "#3e9e62";
+    const len = v * sc;
+    ctx.fillRect(v < 0 ? zero + len : zero + 1, yy, Math.abs(len), 8);
+    txt(`${v > 0 ? "+" : ""}${v}%`, v < 0 ? zero + 3 : Math.min(zero + len + 3, x + w - 30), yy + 7, 6.5, "#2a2d3a");
+  });
+}
+function drawTray(t) {
+  const p = iso(t.gx, t.gy, 24);
+  const pend = pendingApprovals().length;
+  ctx.fillStyle = "#e9e1cf"; ctx.fillRect(p.x - 10, p.y - 6, 20, 7);
+  if (pend) {
+    const pulse = 0.5 + 0.5 * Math.sin(performance.now() / 260);
+    ctx.fillStyle = `rgba(243,210,91,${0.35 + 0.4 * pulse})`;
+    ctx.beginPath(); ctx.ellipse(p.x, p.y - 3, 20, 10, 0, 0, Math.PI * 2); ctx.fill();
+    ctx.fillStyle = "#f3d25b"; ctx.fillRect(p.x - 7, p.y - 10, 14, 6);
+  }
+}
+function drawLamp(t) { // execution room red lamp, blinks while a position is open
+  const p = iso(28.5, 1.5, 54);
+  const open = store.market.openPositions.length > 0;
+  const on = open && Math.floor(t / 450) % 2 === 0;
+  ctx.fillStyle = on ? "#ff3b2f" : "#6b3a36";
+  ctx.beginPath(); ctx.arc(p.x, p.y, 6, 0, Math.PI * 2); ctx.fill();
+  if (on) { ctx.fillStyle = "rgba(255,59,47,.25)"; ctx.beginPath(); ctx.arc(p.x, p.y, 16, 0, Math.PI * 2); ctx.fill(); }
+}
+
+function drawPerson(a, t) {
+  const p = iso(a.x, a.y);
+  const moving = a.path && a.path.length > 0;
+  let x = p.x, y = p.y;
+  if (a.state === "alert") x += Math.sin(t / 30) * 2;
+  const bob = moving ? Math.abs(Math.sin(t / 110 + a.bob)) * 3 : Math.sin(t / 700 + a.bob) * 0.8;
+  const alpha = a.state === "offline" ? 0.4 : 1;
+  ctx.globalAlpha = alpha;
+  ctx.fillStyle = "rgba(0,0,0,.22)"; ctx.beginPath(); ctx.ellipse(x, y, 12, 5, 0, 0, Math.PI * 2); ctx.fill();
+  const step = moving ? Math.sin(t / 90 + a.bob) * 2 : 0;
+  ctx.fillStyle = "#2f3446"; ctx.fillRect(x - 6, y - 12 + step * 0.3, 5, 11); ctx.fillRect(x + 1, y - 12 - step * 0.3, 5, 11);
+  const by = y - 12 - bob;
+  ctx.fillStyle = a.shirt; roundRect(x - 9, by - 15, 18, 17, 5); ctx.fill();
+  ctx.fillStyle = "#e8b98f"; ctx.beginPath(); ctx.arc(x, by - 24, 10, 0, Math.PI * 2); ctx.fill();
+  ctx.fillStyle = a.hair; ctx.beginPath(); ctx.arc(x, by - 26, 10.5, Math.PI * 1.02, Math.PI * 1.98); ctx.fill();
+  ctx.fillRect(x - 10, by - 28, 20, 4);
+  ctx.fillStyle = "#1d1d24"; ctx.fillRect(x - 4, by - 23, 2, 3); ctx.fillRect(x + 3, by - 23, 2, 3);
+  ctx.fillStyle = "rgba(220,110,110,.45)"; ctx.fillRect(x - 7, by - 19, 3, 2); ctx.fillRect(x + 5, by - 19, 3, 2);
+  ctx.globalAlpha = 1;
+  a._hit = { x: x - 14, y: by - 38, w: 28, h: y - by + 42 };
+  a._screen = { x, y: by - 36, feet: y };
+}
+function roundRect(x, y, w, h, r) { ctx.beginPath(); ctx.moveTo(x + r, y); ctx.arcTo(x + w, y, x + w, y + h, r); ctx.arcTo(x + w, y + h, x, y + h, r); ctx.arcTo(x, y + h, x, y, r); ctx.arcTo(x, y, x + w, y, r); ctx.closePath(); }
+function wrap(text, maxW) {
+  const words = text.split(" "); const lines = []; let line = "";
+  for (const w of words) { const test = line ? line + " " + w : w; if (ctx.measureText(test).width > maxW && line) { lines.push(line); line = w; } else line = test; }
+  if (line) lines.push(line);
+  if (lines.length > 2) { lines.length = 2; lines[1] = lines[1].replace(/.{0,2}$/, "…"); }
+  return lines;
+}
+const BADGE = { waiting_approval: "⏳", alert: "⚠️", idle: "💤", meeting: "💬" };
+function drawOverlay(a, isSel) {
+  const s = a._screen; if (!s) return;
+  // nametag
+  ctx.font = `500 10px "Pixelify Sans", monospace`;
+  const tag = `${a.nama} · ${a.jabatan}`;
+  const tw = ctx.measureText(tag).width + 10;
+  ctx.fillStyle = isSel ? "#f0b44c" : "rgba(25,29,43,.86)"; roundRect(s.x - tw / 2, s.feet + 6, tw, 15, 3); ctx.fill();
+  ctx.fillStyle = isSel ? "#2a1d05" : "#ece6d8"; ctx.textAlign = "center"; ctx.fillText(tag, s.x, s.feet + 17); ctx.textAlign = "left";
+  if (!a.bubble) return;
+  // bubble
+  ctx.font = `500 10.5px "IBM Plex Sans", sans-serif`;
+  const lines = wrap(a.bubble, 118);
+  const bw = Math.max(...lines.map(l => ctx.measureText(l).width)) + 14, bh = lines.length * 13 + 9;
+  const bx = s.x - bw / 2, byy = s.y - bh - 12;
+  const border = a.state === "waiting_approval" ? "#f3d25b" : a.state === "alert" ? "#ef6b57" : a.state === "meeting" ? "#63c7b2" : "#cfc6b4";
+  ctx.fillStyle = "#fbf8f1"; roundRect(bx, byy, bw, bh, 6); ctx.fill();
+  ctx.strokeStyle = border; ctx.lineWidth = 2; ctx.stroke();
+  ctx.beginPath(); ctx.moveTo(s.x - 5, byy + bh); ctx.lineTo(s.x, byy + bh + 7); ctx.lineTo(s.x + 5, byy + bh); ctx.closePath(); ctx.fillStyle = "#fbf8f1"; ctx.fill();
+  ctx.fillStyle = "#24252d"; lines.forEach((l, i) => ctx.fillText(l, bx + 7, byy + 15 + i * 13));
+  const b = BADGE[a.state];
+  if (b) { ctx.font = `14px system-ui, "Apple Color Emoji", "Segoe UI Emoji", sans-serif`; ctx.fillText(b, bx + bw - 8, byy + 4); }
+}
+function drawRoomLabels() {
+  ctx.font = `700 13px "Pixelify Sans", monospace`;
+  ROOMS.forEach(r => {
+    const p = iso(r.x0 + 0.35, r.y1 - 0.35);
+    const w = ctx.measureText(r.name).width + 12;
+    ctx.fillStyle = r.id === currentRoom ? "rgba(240,180,76,.92)" : "rgba(25,29,43,.72)";
+    roundRect(p.x - 4, p.y - 8, w, 18, 3); ctx.fill();
+    ctx.fillStyle = r.id === currentRoom ? "#2a1d05" : "#ece6d8"; ctx.fillText(r.name, p.x + 2, p.y + 5);
+  });
+}
+
+let last = performance.now();
+function frame(t) {
+  const dt = Math.min(0.05, (t - last) / 1000); last = t;
+  // move agents
+  for (const a of store.agents) {
+    if (!a.path.length) continue;
+    const [nx, ny] = a.path[0]; const tx = nx + 0.5, ty = ny + 0.5;
+    const dx = tx - a.x, dy = ty - a.y, d = Math.hypot(dx, dy), sp = 2.6 * dt;
+    if (d <= sp) { a.x = tx; a.y = ty; a.path.shift(); } else { a.x += dx / d * sp; a.y += dy / d * sp; }
+  }
+  // camera
+  if (cam.follow) {
+    const v = roomView(ROOMS.find(r => r.id === currentRoom));
+    const k = 1 - Math.pow(0.002, dt);
+    cam.x += (v.x - cam.x) * k; cam.y += (v.y - cam.y) * k; scale += (v.s - scale) * k;
+  }
+  const night = isNight();
+  ctx.setTransform(1, 0, 0, 1, 0, 0);
+  ctx.fillStyle = night ? "#10131f" : "#1f2638"; ctx.fillRect(0, 0, canvas.width, canvas.height);
+  ctx.setTransform(dpr * scale, 0, 0, dpr * scale, dpr * (cw / 2 - cam.x * scale), dpr * (ch / 2 - cam.y * scale));
+
+  drawWalls(night, t);
+  drawFloor();
+  const items = [...furniture, ...PARTITIONS,
+    ...store.agents.map(a => ({ kind: "agent", a, depth: a.x + a.y + 0.2 })),
+    { kind: "agent", a: BOSS, depth: BOSS.x + BOSS.y }];
+  items.sort((p, q) => p.depth - q.depth);
+  for (const it of items) {
+    if (it.kind === "box") drawBox(it);
+    else if (it.kind === "agent") drawPerson(it.a, t);
+    else if (it.kind === "easel") drawEasel(it);
+    else if (it.kind === "tray") drawTray(it);
+  }
+  drawLamp(t);
+  if (night) {
+    ctx.save(); ctx.globalCompositeOperation = "multiply";
+    ctx.fillStyle = "#6f78a8"; ctx.fillRect(-5000, -5000, 10000, 10000);
+    ctx.globalCompositeOperation = "lighter";
+    for (const [gx, gy, z, r, c] of glows) {
+      const p = iso(gx, gy, z); const g = ctx.createRadialGradient(p.x, p.y, 0, p.x, p.y, r);
+      g.addColorStop(0, c + "55"); g.addColorStop(1, c + "00"); ctx.fillStyle = g; ctx.fillRect(p.x - r, p.y - r, r * 2, r * 2);
+    }
+    ctx.restore();
+    drawLamp(t);
+  }
+  drawRoomLabels();
+  [...store.agents, BOSS].sort((p, q) => (p.x + p.y) - (q.x + q.y)).forEach(a => drawOverlay(a, selected === a.id));
+  requestAnimationFrame(frame);
+}
+requestAnimationFrame(frame);
+
+/* ------------------------------------------------------------------ pointer */
+let down = null;
+canvas.addEventListener("pointerdown", e => { down = { x: e.clientX, y: e.clientY, cx: cam.x, cy: cam.y, moved: false }; canvas.setPointerCapture(e.pointerId); });
+canvas.addEventListener("pointermove", e => {
+  if (!down) return;
+  const dx = e.clientX - down.x, dy = e.clientY - down.y;
+  if (!down.moved && Math.hypot(dx, dy) > 5) { down.moved = true; cam.follow = false; canvas.classList.add("dragging"); }
+  if (down.moved) { cam.x = down.cx - dx / scale; cam.y = down.cy - dy / scale; }
+});
+canvas.addEventListener("pointerup", e => {
+  const d = down; down = null; canvas.classList.remove("dragging");
+  if (!d || d.moved) return;
+  const r = canvas.getBoundingClientRect();
+  const wx = (e.clientX - r.left - cw / 2) / scale + cam.x, wy = (e.clientY - r.top - ch / 2) / scale + cam.y;
+  const hit = [...store.agents, BOSS].filter(a => a._hit && wx >= a._hit.x && wx <= a._hit.x + a._hit.w && wy >= a._hit.y && wy <= a._hit.y + a._hit.h)
+    .sort((p, q) => (q.x + q.y) - (p.x + p.y))[0];
+  if (hit) { selected = hit.id; renderPanel(true); return; }
+  // click the boss desk → approval table
+  const tray = iso(26.5, 10.5, 24);
+  if (Math.hypot(wx - tray.x, wy - tray.y) < 40) { selected = null; renderPanel(true); return; }
+  const g = { x: (wx / (TW / 2) + wy / (TH / 2)) / 2, y: (wy / (TH / 2) - wx / (TW / 2)) / 2 };
+  const room = roomOf(Math.floor(g.x), Math.floor(g.y));
+  if (room) goRoom(room.id);
+});
+canvas.addEventListener("keydown", e => {
+  const i = ROOMS.findIndex(r => r.id === currentRoom);
+  if (e.key === "ArrowRight") goRoom(ROOMS[(i + 1) % ROOMS.length].id);
+  if (e.key === "ArrowLeft") goRoom(ROOMS[(i + ROOMS.length - 1) % ROOMS.length].id);
+});
+
+/* ------------------------------------------------------------------ boot */
+function tickClock() { $("#clock").textContent = `${nowHM()} WIB`; }
+tickClock(); setInterval(tickClock, 15000);
+renderTabs(); renderTicker(); renderPanel();
+setTimeout(() => toast("Raka minta izin: BTC long. Buka Ruang Bos untuk memutuskan."), 900);
+</script>
+
+</body>
+</html>

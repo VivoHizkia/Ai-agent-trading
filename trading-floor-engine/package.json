@@ -1,0 +1,61 @@
+{
+  "name": "trading-floor-engine",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Engine kuant + backtester futures (rule-based) untuk Trading Floor",
+  "type": "module",
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "fetch": "tsx src/cli.ts fetch",
+    "backtest": "tsx src/cli.ts backtest",
+    "walkforward": "tsx src/cli.ts walkforward",
+    "scan": "tsx src/cli.ts scan",
+    "demo": "tsx src/cli.ts scan --synthetic",
+    "fetch:all": "tsx src/cli.ts fetch --symbols BTCUSDT,XRPUSDT --tfs 4h,1d --from 2020-01-01",
+    "scan:all": "tsx src/cli.ts scan --symbols BTCUSDT,XRPUSDT --tfs 4h,1d",
+    "fetch:top30": "tsx src/cli.ts fetch --symbols all --top 30 --tfs 4h,1d --from 2020-01-01",
+    "scan:top30": "tsx src/cli.ts scan --symbols all --top 30 --tfs 4h,1d",
+    "fetch:top100": "tsx src/cli.ts fetch --symbols all --top 100 --tfs 4h,1d --from 2020-01-01",
+    "scan:top100": "tsx src/cli.ts scan --symbols all --top 100 --tfs 4h,1d",
+    "debate": "tsx src/cli.ts debate",
+    "bot": "tsx src/exec/bot.ts",
+    "bot:stop": "node -e \"const fs=require('fs'),path=require('path');const dir=path.join(process.env.OFFICE_DIR||'office','execution');fs.mkdirSync(dir,{recursive:true});fs.writeFileSync(path.join(dir,'STOP'),new Date().toISOString());console.log('Kill switch dibuat \u2014 bot akan berhenti di tick berikutnya.')\"",
+    "bot:reset-day": "node -e \"const fs=require('fs'),path=require('path');const dir=path.join(process.env.OFFICE_DIR||'office','execution');fs.mkdirSync(dir,{recursive:true});fs.writeFileSync(path.join(dir,'DAY_RESET'),new Date().toISOString());console.log('Batas rugi harian dihitung ulang mulai sekarang (hanya untuk hari ini, WIB). Besok kembali normal.')\"",
+    "bot:status": "node -e \"const fs=require('fs'),path=require('path');const f=path.join(process.env.OFFICE_DIR||'office','execution','state.json');console.log(fs.existsSync(f)?fs.readFileSync(f,'utf8'):'Belum ada state (bot belum pernah jalan).')\"",
+    "approvals": "tsx src/cli.ts approvals",
+    "sentiment": "tsx src/cli.ts sentiment",
+    "market": "tsx src/agents/market-snapshot.ts",
+    "scheduler": "tsx src/agents/scheduler.ts",
+    "notify": "tsx src/agents/notifier.ts",
+    "notify:test": "tsx src/agents/notifier.ts --test",
+    "notify:chatid": "tsx src/agents/notifier.ts --chatid",
+    "notify:commands": "tsx src/agents/notifier.ts --commands",
+    "lab": "tsx src/ops/run.ts lab",
+    "discover": "tsx src/ops/run.ts discover",
+    "livecheck": "tsx src/ops/run.ts livecheck",
+    "tune": "tsx src/ops/run.ts tune",
+    "review": "tsx src/ops/run.ts review",
+    "regime": "tsx src/ops/run.ts regime",
+    "calendar": "tsx src/ops/run.ts calendar",
+    "test": "vitest run",
+    "typecheck": "tsc --noEmit",
+    "crowd": "tsx src/ops/run.ts crowd",
+    "llm:test": "tsx src/agents/llm-test.ts",
+    "scalp:fetch": "tsx src/scalp/run.ts fetch",
+    "scalp:test": "tsx src/scalp/run.ts test",
+    "mtf:test": "tsx src/scalp/mtf.ts"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.0",
+    "tsx": "^4.19.2",
+    "typescript": "^5.7.2",
+    "vitest": "^2.1.8"
+  },
+  "dependencies": {
+    "@anthropic-ai/sdk": "^1.1.0",
+    "dotenv": "^18.0.9",
+    "zod": "^4.6.7"
+  }
+}

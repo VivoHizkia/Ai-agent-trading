@@ -1,0 +1,22 @@
+# Repo ini PUBLIK. Daftar putih: hanya Trading Floor yang ikut; project lain di folder ini (dashboard/, src/, .env root) tidak.
+/*
+!/.gitignore
+!/README.md
+!/CLAUDE.md
+!/PM2.md
+!/ecosystem.config.cjs
+!/trading-floor-start.bat
+!/trading-floor-engine/
+!/trading-floor-ui/
+
+# Kredensial: JANGAN PERNAH dipublikasikan. Hanya file contoh (tanpa nilai) yang boleh ikut.
+.env
+.env.*
+!/trading-floor-engine/.env.example
+!/trading-floor-ui/.env.local.example
+*.pem
+*.key
+*.p12
+
+node_modules/
+*.log
